@@ -42,19 +42,7 @@ def expect_str(attr):
     assert(attr.form in ['string', 'strp'])
     return attr.value
 
-def expect_str_n(attr):
-    if attr is None:
-        return None
-    assert(attr.form in ['string', 'strp'])
-    return attr.value
-
 def expect_int(attr):
-    assert(attr.form in ['sdata', 'data1', 'data2', 'data4', 'data8'])
-    return attr.value
-
-def expect_int_n(attr):
-    if attr is None:
-        return None
     assert(attr.form in ['sdata', 'data1', 'data2', 'data4', 'data8'])
     return attr.value
 
@@ -62,10 +50,8 @@ def expect_ref(attr):
     assert(attr.form in ['ref1', 'ref2', 'ref4', 'ref8'])
     return attr.value
 
-def expect_ref_n(attr):
-    if attr is None:
-        return None
-    assert(attr.form in ['ref1', 'ref2', 'ref4', 'ref8'])
+def expect_flag(attr):
+    assert(attr.form in ['flag'])
     return attr.value
 
 def get_flag(die, attrname, default=None):
@@ -74,10 +60,9 @@ def get_flag(die, attrname, default=None):
     except KeyError:
         return default
     else:
-        assert(attr.form in ['flag'])
-        return attr.value
+        return expect_flag(attr)
 
-def get_str(die, attrname, default=None):
+def get_str(die, attrname, default=None, allow_none=True):
     try:
         attr = die.attr_dict[attrname]
     except KeyError:
@@ -93,11 +78,23 @@ def get_int(die, attrname, default=None):
     else:
         return expect_int(attr)
 
+def get_ref(die, attrname, default=None):
+    try:
+        attr = die.attr_dict[attrname]
+    except KeyError:
+        return default
+    else:
+        return expect_ref(attr)
+
+def not_none(x):
+    assert x is not None
+    return x
+
 # DWARF die to syntax tree fragment
 # TODO: forward type references are possible, need to split into two passes
 def to_c_process(die, names):
     def get_type_ref(die, attr):
-        type_ = expect_ref_n(die.attr_dict.get('type'))
+        type_ = get_ref(die, 'type')
         if type_ is None:
             ref = base_type_ref('void')
         else:
@@ -112,8 +109,8 @@ def to_c_process(die, names):
         items = []
         for enumval in die.children:
             assert(enumval.tag == DW_TAG.enumerator)
-            (name, const_value) = (expect_str(enumval.attr_dict['name']), 
-                                   expect_int(enumval.attr_dict['const_value']))
+            (name, const_value) = (not_none(get_str(enumval,'name')), 
+                                   not_none(get_int(enumval,'const_value')))
             items.append(EnumItem(name, const_value, Comment('0x%08x' % const_value)))
         name = expect_str(die.attr_dict['name']) if 'name' in die.attr_dict else None
         if name is None:
@@ -122,8 +119,8 @@ def to_c_process(die, names):
             rv.append(Enum(name, items))
             typeref = base_type_ref('enum ' + name)
     elif die.tag == DW_TAG.typedef:
-        name = expect_str(die.attr_dict['name'])
-        type_ = expect_ref(die.attr_dict['type'])
+        name = not_none(get_str(die,'name'))
+        type_ = not_none(get_ref(die, 'type'))
         ref = names.get(type_)
         if ref is not None:
             rv.append(Typedef(ref(name)))
@@ -131,14 +128,14 @@ def to_c_process(die, names):
         else:
             rv.append(Comment("Unhandled typedef %s:%i" % (name, type_)))
     elif die.tag == DW_TAG.base_type:
-        name = expect_str_n(die.attr_dict.get('name'))
+        name = get_str(die, 'name')
         if name is None:
-            name = 'unknown' #??
+            name = 'unknown_base' #??
             rv.append(Comment(str(die)))
         rv.append(Comment("Basetype: %s" % name))
         typeref = base_type_ref(name)
     elif die.tag == DW_TAG.pointer_type:
-        type_ = expect_ref_n(die.attr_dict.get('type'))
+        type_ = get_ref(die, 'type')
 
         if type_ is not None:
             ref = names.get(type_)
@@ -149,7 +146,7 @@ def to_c_process(die, names):
         else:
             rv.append(Comment("Unhandled pointer type to %s" % (type_)))
     elif die.tag == DW_TAG.const_type:
-        type_ = expect_ref_n(die.attr_dict.get('type'))
+        type_ = get_ref(die, 'type')
         if type_ is not None:
             ref = names.get(type_)
         if ref is not None:
@@ -258,7 +255,7 @@ def parse_dwarf(infile):
     prev_decl_file = object()
     names = {} # Defined names for dies, as references, indexed by offset
     for child in cu_die.children:
-        decl_file_id = expect_int_n(child.attr_dict.get('decl_file'))
+        decl_file_id = get_int(child, 'decl_file')
         decl_file = cu.get_file_path(decl_file_id) if decl_file_id is not None else None
         if decl_file != prev_decl_file:
             if decl_file == c_file:
