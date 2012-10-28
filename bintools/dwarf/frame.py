@@ -2,6 +2,8 @@
 Copyright (c) 2010, Cambridge Silicon Radio Ltd.
 Written by Emilio Monti <emilmont@gmail.com>
 """
+from __future__ import print_function
+from sys import stderr
 from bintools.dwarf.stream import SectionLoader
 from bintools.dwarf.enums import DW_CFA
 
@@ -72,7 +74,7 @@ def parse_call_frame_instructions(dwarf, length):
                     operand_2 = dwarf.read_type(type_2)
             else:
                 opname = DW_CFA[opcode] if opcode in DW_CFA else "unknown"
-                print("unhandled opcode: %02x (%s)" % (opcode,opname))
+                print("unhandled opcode: %02x (%s)" % (opcode,opname), file=stderr)
         
         instructions.append(CallFrameInstruction(opcode, operand_1, operand_2))
     
