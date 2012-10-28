@@ -91,11 +91,13 @@ def not_none(x):
     return x
 
 # DWARF die to syntax tree fragment
-# TODO: forward type references are possible, need to split into two passes
+# TODO: forward (and circular) type references are possible, need to split into two passes
+#     and generate predeclarations where needed.
 def to_c_process(die, names):
-    def get_type_ref(die, attr):
+    def get_type_ref(die, attr, allow_missing=True):
         type_ = get_ref(die, 'type')
         if type_ is None:
+            assert(allow_missing) # Allow missing field?
             ref = base_type_ref('void')
         else:
             ref = names.get(type_)
@@ -118,15 +120,13 @@ def to_c_process(die, names):
         else:
             rv.append(Enum(name, items))
             typeref = base_type_ref('enum ' + name)
+
     elif die.tag == DW_TAG.typedef:
         name = not_none(get_str(die,'name'))
-        type_ = not_none(get_ref(die, 'type'))
-        ref = names.get(type_)
-        if ref is not None:
-            rv.append(Typedef(ref(name)))
-            typeref = base_type_ref(name) 
-        else:
-            rv.append(Comment("Unhandled typedef %s:%i" % (name, type_)))
+        ref = get_type_ref(die, 'type', allow_missing=False)
+        rv.append(Typedef(ref(name)))
+        typeref = base_type_ref(name) 
+
     elif die.tag == DW_TAG.base_type:
         name = get_str(die, 'name')
         if name is None:
@@ -134,17 +134,12 @@ def to_c_process(die, names):
             rv.append(Comment(str(die)))
         rv.append(Comment("Basetype: %s" % name))
         typeref = base_type_ref(name)
-    elif die.tag == DW_TAG.pointer_type:
-        type_ = get_ref(die, 'type')
 
-        if type_ is not None:
-            ref = names.get(type_)
-        else: # pointer to unspecified type =~ void*
-            ref = base_type_ref('void')
-        if ref is not None:
-            typeref = ptr_to_ref(ref) 
-        else:
-            rv.append(Comment("Unhandled pointer type to %s" % (type_)))
+    elif die.tag == DW_TAG.pointer_type:
+        ref = get_type_ref(die, 'type')
+
+        typeref = ptr_to_ref(ref) 
+
     elif die.tag == DW_TAG.const_type:
         type_ = get_ref(die, 'type')
         if type_ is not None:
@@ -153,7 +148,8 @@ def to_c_process(die, names):
             typeref = const_ref(ref) 
         else:
             rv.append(Comment("Unhandled const type to %s" % (type_)))
-    elif die.tag == DW_TAG.structure_type or die.tag == DW_TAG.union_type:
+
+    elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
             items = None # declaration only
         else:
@@ -162,7 +158,7 @@ def to_c_process(die, names):
             for enumval in die.children:
                 assert(enumval.tag == DW_TAG.member)
                 # mind bit_size / bit_offset
-                # data_member_location...
+                # TODO: data_member_location as comment...
                 if 'bit_size' in enumval.attr_dict or 'bit_offset' in enumval.attr_dict:
                     warning = True
                 name = expect_str(enumval.attr_dict['name'])
@@ -185,7 +181,8 @@ def to_c_process(die, names):
         else:
             rv.append(cons)
             typeref = base_type_ref(tname + ' ' + name)
-    elif 0:# die.tag == DW_TAG.subroutine_type:
+
+    elif die.tag == DW_TAG.subroutine_type:
         returntype = get_type_ref(die, 'type')
         args = []
         for i,val in enumerate(die.children):
@@ -193,9 +190,8 @@ def to_c_process(die, names):
             argtype = get_type_ref(val, 'type')
             argname = get_str(val, 'name', 'arg%i' % i)
             args.append(argtype(argname))
-        cons = FunctionDeclaration(returntype, args)
-        rv.append(Comment("subroutine"))
-        rv.append(cons)
+        typeref = lambda name: FunctionDeclaration(returntype(name), args)
+
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
         count = None
@@ -205,6 +201,7 @@ def to_c_process(die, names):
         if count is not None:
             count += 1 # count is upper_bound + 1
         typeref = array_ref(subtype, count) 
+
     elif die.tag == DW_TAG.subprogram:
         inline = get_int(die, 'inline', 0)
         returntype = get_type_ref(die, 'type')
@@ -223,7 +220,6 @@ def to_c_process(die, names):
             rv.append(cons)
     else:
         rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
-    # TODO: subroutine_type
     return (rv, typeref)
 
 # Functions for manipulating "type references"
