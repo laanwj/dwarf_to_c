@@ -137,17 +137,11 @@ def to_c_process(die, names):
 
     elif die.tag == DW_TAG.pointer_type:
         ref = get_type_ref(die, 'type')
-
         typeref = ptr_to_ref(ref) 
 
     elif die.tag == DW_TAG.const_type:
-        type_ = get_ref(die, 'type')
-        if type_ is not None:
-            ref = names.get(type_)
-        if ref is not None:
-            typeref = const_ref(ref) 
-        else:
-            rv.append(Comment("Unhandled const type to %s" % (type_)))
+        ref = get_type_ref(die, 'type', allow_missing=False)
+        typeref = const_ref(ref) 
 
     elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
@@ -157,15 +151,11 @@ def to_c_process(die, names):
             warning = False
             for enumval in die.children:
                 assert(enumval.tag == DW_TAG.member)
-                # mind bit_size / bit_offset
-                # TODO: data_member_location as comment...
+                # TODO: data_member_location and bit_size / bit_offset as comment for fields...
                 if 'bit_size' in enumval.attr_dict or 'bit_offset' in enumval.attr_dict:
                     warning = True
                 name = expect_str(enumval.attr_dict['name'])
-                type_ = expect_ref(enumval.attr_dict['type'])
-                ref = names.get(type_)
-                if ref is None:
-                    ref = base_type_ref('unknown_%i' % type_)
+                ref = get_type_ref(enumval, 'type', allow_missing=False)
                 items.append(ref(name))
             if warning:
                 rv.append(Comment("Warning: this structure contains bitfields"))
