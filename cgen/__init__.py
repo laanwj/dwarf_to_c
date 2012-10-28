@@ -301,7 +301,7 @@ class FunctionDeclaration(NestedDeclarator):
 class Struct(Declarator):
     """A structure declarator."""
 
-    def __init__(self, tpname, fields, name=None, pad_bytes=0):
+    def __init__(self, tpname, fields, name=None, pad_bytes=0, field_comments=None):
         """Initialize the structure declarator.
         *tpname* is the name of the structure, while *name* is the
         name used for the declarator. *pad_bytes* is the number of
@@ -312,6 +312,7 @@ class Struct(Declarator):
         self.fields = fields
         self.name = name
         self.pad_bytes = pad_bytes
+        self.field_comments = field_comments
 
     def get_decl_pair(self):
         def get_tp():
@@ -321,9 +322,16 @@ class Struct(Declarator):
                 yield "struct"
             if self.fields is not None:
                 yield "{"
-                for f in self.fields:
-                    for f_line in f.generate():
-                        yield "  " + f_line
+                if self.field_comments is not None:
+                    for f,c in zip(self.fields, self.field_comments):
+                        if c:
+                            c = " /* " + c + " */"
+                        for f_line in iterator_pre_post(f.generate(), post=c):
+                            yield "  " + f_line
+                else:
+                    for f in self.fields:
+                        for f_line in f.generate():
+                            yield "  " + f_line
                 if self.pad_bytes:
                     yield "  unsigned char _cgen_pad[%d];" % self.pad_bytes
                 yield "} " + self.struct_attributes()

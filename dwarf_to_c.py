@@ -20,6 +20,7 @@ Convert DWARF annotations in ELF executable to C declarations
 # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION 
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+from __future__ import print_function
 import argparse
 import cgen
 
@@ -35,10 +36,12 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Convert DWARF annotations in ELF executable to C declarations')
     parser.add_argument('input', metavar='INFILE', type=str, 
             help='Input file (ELF)')
+    parser.add_argument('cuname', metavar='CUNAME', type=str, 
+            help='Compilation unit name')
     return parser.parse_args()        
 
 from bintools.dwarf import DWARF
-from bintools.dwarf.enums import DW_AT, DW_TAG, DW_LANG, DW_ATE, DW_FORM
+from bintools.dwarf.enums import DW_AT, DW_TAG, DW_LANG, DW_ATE, DW_FORM, DW_OP
 from cgen import (Module, Include, FunctionBody, FunctionDeclaration, Const, 
         Pointer, Value, Block, Statement, Struct, Value, Enum, EnumItem, 
         Comment, Typedef, Declarator, Union, ArrayOf)
@@ -119,7 +122,7 @@ WRITTEN_FINAL = 2  # Final structure has been written
 
 def to_c_process(die, by_offset, names, rv, written, preref=False):
     if DEBUG:
-        print "to_c_process", die.offset, preref
+        print("to_c_process", die.offset, preref)
     def get_type_ref(die, attr, allow_missing=True):
         '''
         Get type ref for a type attribute.
@@ -128,7 +131,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         '''
         type_ = get_ref(die, 'type')
         if DEBUG:
-            print die.offset, "->", type_
+            print (die.offset, "->", type_)
         if type_ is None:
             assert(allow_missing) # Allow missing field?
             ref = base_type_ref('void')
@@ -192,21 +195,31 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
     elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
             items = None # declaration only
+            comments = None
         else:
             items = []
-            warning = False
+            comments = []
             for enumval in die.children:
                 assert(enumval.tag == DW_TAG.member)
-                # TODO: data_member_location and bit_size / bit_offset as comment for fields...
-                if 'bit_size' in enumval.attr_dict or 'bit_offset' in enumval.attr_dict:
-                    warning = True
+                # data_member_location and bit_size / bit_offset as comment for fields
+                comment = []
+                if 'data_member_location' in enumval.attr_dict:
+                    expr = enumval.attr_dict['data_member_location'].value
+                    assert(expr.instructions[0].opcode == DW_OP.plus_uconst)
+                    comment.append("+0x%x" % expr.instructions[0].operand_1)
+                if 'byte_size' in enumval.attr_dict:
+                    comment.append('byte_size=%i' % get_int(enumval, 'byte_size'))
+                if 'bit_size' in enumval.attr_dict:
+                    comment.append('bit_size=%i' % get_int(enumval, 'bit_size'))
+                if 'bit_offset' in enumval.attr_dict:
+                    comment.append('bit_offset=%i' % get_int(enumval, 'bit_offset'))
+                # TODO: handle bit fields properly
                 ename = expect_str(enumval.attr_dict['name'])
                 ref = get_type_ref(enumval, 'type', allow_missing=False)
                 items.append(ref(ename))
-            if warning:
-                rv.append(Comment("Warning: this structure contains bitfields"))
+                comments.append(' '.join(comment))
         if die.tag == DW_TAG.structure_type:
-            cons = Struct(name, items)
+            cons = Struct(name, items, field_comments=comments)
         else:
             cons = Union(name, items)
         if name is None: # anonymous structure
@@ -283,15 +296,19 @@ def array_ref(ref, count=None):
     return lambda x: ArrayOf(ref(x), count=count)
 
 # Main conversion function
-def parse_dwarf(infile):
+def parse_dwarf(infile, cuname):
     if not os.path.isfile(infile):
-        print >>sys.stderr, "No such file %s" % infile
+        print("No such file %s" % infile, file=sys.stderr)
         exit(1)
     dwarf = DWARF(infile)
 
-    #for i, cu in enumerate(dwarf.info.cus):
-    #    print i, cu.name
-    cu = dwarf.info.cus[130]
+    cu = None
+    for i, c in enumerate(dwarf.info.cus):
+        if c.name.endswith(cuname):
+            cu = c
+            break
+    if cu is None:
+        print("Can't find compilation unit %s" % cuname, file=sys.stderr)
     # enumerate all dies (flat list)
     #for die in cu.dies:
     #    print DW_TAG[die.tag]
@@ -321,7 +338,7 @@ def parse_dwarf(infile):
         '''
         if 'name' in child.attr_dict:
             if DEBUG:
-                print "root", child.offset
+                print("root", child.offset)
             if written[child.offset] != WRITTEN_FINAL:
                 to_c_process(child, by_offset, names, statements, written)
 
@@ -344,7 +361,7 @@ def main():
     # The idea, basically is to convert the DWARF tree to a C syntax tree, then 
     # generate C code using cgen
     args = parse_arguments()
-    statements = parse_dwarf(args.input)
+    statements = parse_dwarf(args.input,args.cuname)
     ast = generate_c_code(statements)
     for line in ast.generate():
         sys.stdout.write(line+'\n')
