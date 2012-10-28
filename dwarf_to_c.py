@@ -95,6 +95,11 @@ def not_none(x):
 #     and generate predeclarations where needed.
 def to_c_process(die, names):
     def get_type_ref(die, attr, allow_missing=True):
+        '''
+        Get type ref for a type attribute.
+        A type ref is a function that, given a name, constructs a syntax tree
+        for referring to that type.
+        '''
         type_ = get_ref(die, 'type')
         if type_ is None:
             assert(allow_missing) # Allow missing field?
