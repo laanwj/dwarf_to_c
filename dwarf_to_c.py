@@ -35,7 +35,7 @@ from bintools.dwarf import DWARF
 from bintools.dwarf.enums import DW_AT, DW_TAG, DW_LANG, DW_ATE, DW_FORM
 from cgen import (Module, Include, FunctionBody, FunctionDeclaration, Const, 
         Pointer, Value, Block, Statement, Struct, Value, Enum, EnumItem, 
-        Comment, Typedef, Declarator, Union)
+        Comment, Typedef, Declarator, Union, ArrayOf)
 
 # Functions to "unpack" DWARF attributes
 def expect_str(attr):
@@ -158,16 +158,21 @@ def to_c_process(die, names):
             items = None # declaration only
         else:
             items = []
+            warning = False
             for enumval in die.children:
                 assert(enumval.tag == DW_TAG.member)
                 # mind bit_size / bit_offset
                 # data_member_location...
+                if 'bit_size' in enumval.attr_dict or 'bit_offset' in enumval.attr_dict:
+                    warning = True
                 name = expect_str(enumval.attr_dict['name'])
                 type_ = expect_ref(enumval.attr_dict['type'])
                 ref = names.get(type_)
                 if ref is None:
                     ref = base_type_ref('unknown_%i' % type_)
                 items.append(ref(name))
+            if warning:
+                rv.append(Comment("Warning: this structure contains bitfields"))
         name = expect_str(die.attr_dict['name']) if 'name' in die.attr_dict else None
         if die.tag == DW_TAG.structure_type:
             cons = Struct(name, items)
@@ -191,6 +196,15 @@ def to_c_process(die, names):
         cons = FunctionDeclaration(returntype, args)
         rv.append(Comment("subroutine"))
         rv.append(cons)
+    elif die.tag == DW_TAG.array_type:
+        subtype = get_type_ref(die, 'type')
+        count = None
+        for val in die.children:
+            if val.tag == DW_TAG.subrange_type:
+                count = get_int(val, 'upper_bound')
+        if count is not None:
+            count += 1 # count is upper_bound + 1
+        typeref = array_ref(subtype, count) 
     elif die.tag == DW_TAG.subprogram:
         inline = get_int(die, 'inline', 0)
         returntype = get_type_ref(die, 'type')
@@ -210,8 +224,6 @@ def to_c_process(die, names):
     else:
         rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
     # TODO: subroutine_type
-    #       array_type
-    #       subprogram
     return (rv, typeref)
 
 # Functions for manipulating "type references"
@@ -235,6 +247,9 @@ def ptr_to_ref(ref):
 
 def const_ref(ref):
     return lambda x: Const(ref(x))
+
+def array_ref(ref, count=None):
+    return lambda x: ArrayOf(ref(x), count=count)
 
 # Main conversion function
 def parse_dwarf(infile):
