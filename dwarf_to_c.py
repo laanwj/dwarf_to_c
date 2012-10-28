@@ -24,6 +24,12 @@ import argparse
 import cgen
 
 import sys, os
+from collections import defaultdict
+
+DEBUG=False
+# TODO: typedef for subroutine types is wrong
+# should be (*name) to make C compiler able to distinguish
+# return pointer types and pointer type
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Convert DWARF annotations in ELF executable to C declarations')
@@ -91,9 +97,29 @@ def not_none(x):
     return x
 
 # DWARF die to syntax tree fragment
-# TODO: forward (and circular) type references are possible, need to split into two passes
-#     and generate predeclarations where needed.
-def to_c_process(die, names):
+#     Algorithm: realize types when needed for processing
+#     keep cache for types that have been built
+#    
+#     Structs and unions and enums can be predeclared
+#     Do this as needed
+#     Both anonymous and non-anonymous types can be moved as needed
+#     Named types by predeclaring, anonymous types can just be generated where they are needed
+def ERROR(name):
+    raise ValueError('Error: %s' % name)
+
+PREREF_PREFIX = {
+    DW_TAG.enumeration_type: 'enum',
+    DW_TAG.structure_type: 'struct',
+    DW_TAG.union_type: 'union'
+}
+
+WRITTEN_NONE = 0   # Nothing has been written about this type
+WRITTEN_PREREF = 1 # Predefinition has been written
+WRITTEN_FINAL = 2  # Final structure has been written
+
+def to_c_process(die, by_offset, names, rv, written, preref=False):
+    if DEBUG:
+        print "to_c_process", die.offset, preref
     def get_type_ref(die, attr, allow_missing=True):
         '''
         Get type ref for a type attribute.
@@ -101,39 +127,54 @@ def to_c_process(die, names):
         for referring to that type.
         '''
         type_ = get_ref(die, 'type')
+        if DEBUG:
+            print die.offset, "->", type_
         if type_ is None:
             assert(allow_missing) # Allow missing field?
             ref = base_type_ref('void')
         else:
             ref = names.get(type_)
             if ref is None:
-                ref = base_type_ref('unknown_%i' % type_)
+                #ref = base_type_ref('unknown_%i' % type_)
+                ref = to_c_process(by_offset[type_], by_offset, names, rv, written, preref=True)
+            elif ref is ERROR:
+                raise ValueError("Unexpected recursion")
         return ref
         
-    rv = []
-    typeref = None
+    names[die.offset] = typeref = ERROR # prevent unbounded recursion
+
+    # Typeref based on name: simple
+    name = get_str(die, 'name')
+    if name is not None:
+        try:
+            prefix = PREREF_PREFIX[die.tag]
+        except KeyError:
+            pass
+        else: # store early, to allow self-reference
+            names[die.offset] = typeref = base_type_ref(prefix + ' ' + name)
+            if preref: # early-out
+                return typeref
+
     if die.tag == DW_TAG.enumeration_type:
         items = []
         for enumval in die.children:
             assert(enumval.tag == DW_TAG.enumerator)
-            (name, const_value) = (not_none(get_str(enumval,'name')), 
+            (sname, const_value) = (not_none(get_str(enumval,'name')), 
                                    not_none(get_int(enumval,'const_value')))
-            items.append(EnumItem(name, const_value, Comment('0x%08x' % const_value)))
-        name = expect_str(die.attr_dict['name']) if 'name' in die.attr_dict else None
+            items.append(EnumItem(sname, const_value, Comment('0x%08x' % const_value)))
         if name is None:
             typeref = anon_ref(Enum(name, items))
         else:
             rv.append(Enum(name, items))
-            typeref = base_type_ref('enum ' + name)
 
     elif die.tag == DW_TAG.typedef:
-        name = not_none(get_str(die,'name'))
+        assert(name is not None)
         ref = get_type_ref(die, 'type', allow_missing=False)
         rv.append(Typedef(ref(name)))
+        written[die.offset] = WRITTEN_FINAL
         typeref = base_type_ref(name) 
 
     elif die.tag == DW_TAG.base_type:
-        name = get_str(die, 'name')
         if name is None:
             name = 'unknown_base' #??
             rv.append(Comment(str(die)))
@@ -159,33 +200,30 @@ def to_c_process(die, names):
                 # TODO: data_member_location and bit_size / bit_offset as comment for fields...
                 if 'bit_size' in enumval.attr_dict or 'bit_offset' in enumval.attr_dict:
                     warning = True
-                name = expect_str(enumval.attr_dict['name'])
+                ename = expect_str(enumval.attr_dict['name'])
                 ref = get_type_ref(enumval, 'type', allow_missing=False)
-                items.append(ref(name))
+                items.append(ref(ename))
             if warning:
                 rv.append(Comment("Warning: this structure contains bitfields"))
-        name = expect_str(die.attr_dict['name']) if 'name' in die.attr_dict else None
         if die.tag == DW_TAG.structure_type:
             cons = Struct(name, items)
-            tname = 'struct'
         else:
             cons = Union(name, items)
-            tname = 'union'
         if name is None: # anonymous structure
             typeref = anon_ref(cons)
         else:
             rv.append(cons)
-            typeref = base_type_ref(tname + ' ' + name)
+            written[die.offset] = WRITTEN_FINAL
 
     elif die.tag == DW_TAG.subroutine_type:
         returntype = get_type_ref(die, 'type')
         args = []
-        for i,val in enumerate(die.children):
+        for val in die.children:
             assert(val.tag == DW_TAG.formal_parameter)
             argtype = get_type_ref(val, 'type')
-            argname = get_str(val, 'name', 'arg%i' % i)
+            argname = get_str(val, 'name', '')
             args.append(argtype(argname))
-        typeref = lambda name: FunctionDeclaration(returntype(name), args)
+        typeref = lambda name: Pointer(FunctionDeclaration(returntype(name), args))
 
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
@@ -198,10 +236,9 @@ def to_c_process(die, names):
         typeref = array_ref(subtype, count) 
 
     elif die.tag == DW_TAG.subprogram:
+        assert(name is not None)
         inline = get_int(die, 'inline', 0)
         returntype = get_type_ref(die, 'type')
-        name = get_str(die, 'name') 
-        assert(name is not None)
         args = []
         for i,val in enumerate(die.children):
             if val.tag == DW_TAG.formal_parameter:
@@ -213,9 +250,12 @@ def to_c_process(die, names):
             rv.append(Comment('\n'.join(cons.generate())))
         else:
             rv.append(cons)
+        written[die.offset] = WRITTEN_FINAL
     else:
         rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
-    return (rv, typeref)
+
+    names[die.offset] = typeref
+    return typeref
 
 # Functions for manipulating "type references"
 # Effectively these are unary functions that return a constructed
@@ -259,10 +299,17 @@ def parse_dwarf(infile):
     c_file = cu.name # cu name is main file path
     statements = []
     prev_decl_file = object()
+    # Collect type information
+    by_offset = {}
+    for child in cu_die.children:
+        by_offset[child.offset] = child 
+    # Generate actual syntax tree
     names = {} # Defined names for dies, as references, indexed by offset
+    written = defaultdict(int) # What has been written to syntax tree?
     for child in cu_die.children:
         decl_file_id = get_int(child, 'decl_file')
         decl_file = cu.get_file_path(decl_file_id) if decl_file_id is not None else None
+        '''
         if decl_file != prev_decl_file:
             if decl_file == c_file:
                 s = "Defined in compilation unit"
@@ -271,10 +318,12 @@ def parse_dwarf(infile):
             else:
                 s = "Defined in base"
             statements.append(Comment("======== " + s))
-        (rv, typeref) = to_c_process(child, names)
-        statements.extend(rv)
-        if typeref is not None:
-            names[child.offset] = typeref
+        '''
+        if 'name' in child.attr_dict:
+            if DEBUG:
+                print "root", child.offset
+            if written[child.offset] != WRITTEN_FINAL:
+                to_c_process(child, by_offset, names, statements, written)
 
         prev_decl_file = decl_file
     return statements
