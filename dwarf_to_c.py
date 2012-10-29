@@ -22,15 +22,11 @@ Convert DWARF annotations in ELF executable to C declarations
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from __future__ import print_function
 import argparse
-import cgen
 
 import sys, os
 from collections import defaultdict
 
 DEBUG=False
-# TODO: typedef for subroutine types is wrong
-# should be (*name) to make C compiler able to distinguish
-# return pointer types and pointer type
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Convert DWARF annotations in ELF executable to C declarations')
@@ -42,9 +38,8 @@ def parse_arguments():
 
 from bintools.dwarf import DWARF
 from bintools.dwarf.enums import DW_AT, DW_TAG, DW_LANG, DW_ATE, DW_FORM, DW_OP
-from cgen import (Module, Include, FunctionBody, FunctionDeclaration, Const, 
-        Pointer, Value, Block, Statement, Struct, Value, Enum, EnumItem, 
-        Comment, Typedef, Declarator, Union, ArrayOf)
+from pycunparser.c_generator import CGenerator
+from pycunparser import c_ast
 
 # Functions to "unpack" DWARF attributes
 def expect_str(attr):
@@ -110,15 +105,28 @@ def not_none(x):
 def ERROR(name):
     raise ValueError('Error: %s' % name)
 
-PREREF_PREFIX = {
-    DW_TAG.enumeration_type: 'enum',
-    DW_TAG.structure_type: 'struct',
-    DW_TAG.union_type: 'union'
+# Create enum/struct/union <name> to predefine types
+TAG_NODE_CONS = {
+    DW_TAG.enumeration_type: c_ast.Enum,
+    DW_TAG.structure_type:   c_ast.Struct,
+    DW_TAG.union_type:       c_ast.Union
 }
 
 WRITTEN_NONE = 0   # Nothing has been written about this type
 WRITTEN_PREREF = 1 # Predefinition has been written
 WRITTEN_FINAL = 2  # Final structure has been written
+
+# Syntax tree helpers
+def Comment(x):
+    return c_ast.DummyNode(postcomment=x) 
+def IntConst(n):
+    if n is None:
+        return None
+    return c_ast.Constant('int', str(n))
+def EnumItem(key, value):
+    return c_ast.Enumerator(key,IntConst(value), postcomment = '0x%08x' % value)
+def SimpleDecl(x):
+    return c_ast.Decl(None, [], [], [], x, None, None) 
 
 def to_c_process(die, by_offset, names, rv, written, preref=False):
     if DEBUG:
@@ -150,11 +158,11 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
     name = get_str(die, 'name')
     if name is not None:
         try:
-            prefix = PREREF_PREFIX[die.tag]
+            prefix = TAG_NODE_CONS[die.tag](name, None)
         except KeyError:
             pass
         else: # store early, to allow self-reference
-            names[die.offset] = typeref = base_type_ref(prefix + ' ' + name)
+            names[die.offset] = typeref = lambda name: c_ast.TypeDecl(name,[],prefix)
             if preref: # early-out
                 return typeref
 
@@ -164,21 +172,22 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
             assert(enumval.tag == DW_TAG.enumerator)
             (sname, const_value) = (not_none(get_str(enumval,'name')), 
                                    not_none(get_int(enumval,'const_value')))
-            items.append(EnumItem(sname, const_value, Comment('0x%08x' % const_value)))
+            items.append(EnumItem(sname, const_value))
+        enum = c_ast.Enum(name, c_ast.EnumeratorList(items))
         if name is None:
-            typeref = anon_ref(Enum(name, items))
+            typeref = anon_ref(enum)
         else:
-            rv.append(Enum(name, items))
+            rv.append(SimpleDecl(enum))
 
     elif die.tag == DW_TAG.typedef:
         assert(name is not None)
         ref = get_type_ref(die, 'type', allow_missing=False)
-        rv.append(Typedef(ref(name)))
+        rv.append(c_ast.Typedef(name, [], ['typedef'], ref(name)))
         written[die.offset] = WRITTEN_FINAL
         typeref = base_type_ref(name) 
 
-    elif die.tag == DW_TAG.base_type:
-        if name is None:
+    elif die.tag == DW_TAG.base_type: # IdentifierType
+        if name is None: 
             name = 'unknown_base' #??
             rv.append(Comment(str(die)))
         rv.append(Comment("Basetype: %s" % name))
@@ -195,48 +204,35 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
     elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
             items = None # declaration only
-            comments = None
         else:
             items = []
-            comments = []
             for enumval in die.children:
                 assert(enumval.tag == DW_TAG.member)
                 # data_member_location and bit_size / bit_offset as comment for fields
+                bit_size = None
                 comment = []
                 if 'data_member_location' in enumval.attr_dict:
                     expr = enumval.attr_dict['data_member_location'].value
                     assert(expr.instructions[0].opcode == DW_OP.plus_uconst)
                     comment.append("+0x%x" % expr.instructions[0].operand_1)
-                if 'byte_size' in enumval.attr_dict:
-                    comment.append('byte_size=%i' % get_int(enumval, 'byte_size'))
                 if 'bit_size' in enumval.attr_dict:
-                    comment.append('bit_size=%i' % get_int(enumval, 'bit_size'))
+                    bit_size = get_int(enumval, 'bit_size')
                 if 'bit_offset' in enumval.attr_dict:
-                    comment.append('bit_offset=%i' % get_int(enumval, 'bit_offset'))
-                # TODO: handle bit fields properly
+                    bit_offset = get_int(enumval, 'bit_offset')
+                    comment.append('bit %i..%i' % (bit_offset, bit_offset+bit_size-1))
+                if 'byte_size' in enumval.attr_dict:
+                    comment.append('of %i' % (8*get_int(enumval, 'byte_size')))
+                # TODO: validate member location (alignment), bit offset
                 ename = expect_str(enumval.attr_dict['name'])
                 ref = get_type_ref(enumval, 'type', allow_missing=False)
-                items.append(ref(ename))
-                comments.append(' '.join(comment))
-        if die.tag == DW_TAG.structure_type:
-            cons = Struct(name, items, field_comments=comments)
-        else:
-            cons = Union(name, items)
+                items.append(c_ast.Decl(ename,[],[],[], ref(ename), None,
+                    IntConst(bit_size), postcomment=(' '.join(comment))))
+        cons = TAG_NODE_CONS[die.tag](name, items)
         if name is None: # anonymous structure
             typeref = anon_ref(cons)
         else:
-            rv.append(cons)
+            rv.append(SimpleDecl(cons))
             written[die.offset] = WRITTEN_FINAL
-
-    elif die.tag == DW_TAG.subroutine_type:
-        returntype = get_type_ref(die, 'type')
-        args = []
-        for val in die.children:
-            assert(val.tag == DW_TAG.formal_parameter)
-            argtype = get_type_ref(val, 'type')
-            argname = get_str(val, 'name', '')
-            args.append(argtype(argname))
-        typeref = lambda name: Pointer(FunctionDeclaration(returntype(name), args))
 
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
@@ -248,22 +244,27 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
             count += 1 # count is upper_bound + 1
         typeref = array_ref(subtype, count) 
 
-    elif die.tag == DW_TAG.subprogram:
-        assert(name is not None)
+    elif die.tag in [DW_TAG.subroutine_type, DW_TAG.subprogram]:
         inline = get_int(die, 'inline', 0)
         returntype = get_type_ref(die, 'type')
         args = []
         for i,val in enumerate(die.children):
             if val.tag == DW_TAG.formal_parameter:
                 argtype = get_type_ref(val, 'type')
-                argname = get_str(val, 'name', 'arg%i' % i)
-                args.append(argtype(argname))
-        cons = FunctionDeclaration(returntype(name), args)
-        if inline: # Generate commented declaration for inlined function
-            rv.append(Comment('\n'.join(cons.generate())))
-        else:
-            rv.append(cons)
-        written[die.offset] = WRITTEN_FINAL
+                argname = get_str(val, 'name', '')
+                args.append(c_ast.Typename([], argtype(argname)))
+        cons = lambda name: c_ast.FuncDecl(c_ast.ParamList(args), returntype(name))
+
+        if die.tag == DW_TAG.subprogram:
+            assert(name is not None)
+            if inline: # Generate commented declaration for inlined function
+                #rv.append(Comment('\n'.join(cons.generate())))
+                rv.append(Comment('Inline function %s' % name))
+            else:
+                rv.append(SimpleDecl(cons(name)))
+            written[die.offset] = WRITTEN_FINAL
+        else: # DW_TAG.subroutine_type
+            typeref = cons
     else:
         rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
 
@@ -276,24 +277,21 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
 from functools import partial
 def anon_ref(type_def):
     '''Return reference to anonymous struct or enum'''
-    def name_anon(name):
-        '''Name an anonymous object and return it'''
-        assert(type_def.name is None) # name of anon object can only be used once
-        type_def.name = name
-        return type_def 
-    return name_anon
+    return lambda name: c_ast.TypeDecl(name,[],type_def)
 
 def base_type_ref(basetypename):
-    return partial(Value, basetypename)
+    basetypename = basetypename.split(' ')
+    return lambda x: c_ast.TypeDecl(x,[],c_ast.IdentifierType(basetypename))
 
 def ptr_to_ref(ref):
-    return lambda x: Pointer(ref(x))
+    return lambda x: c_ast.PtrDecl([], ref(x))
 
 def const_ref(ref):
-    return lambda x: Const(ref(x))
+    # XXX nested qualifiers are in reversed order in C
+    return lambda x: ref(x) #Const(ref(x))
 
 def array_ref(ref, count=None):
-    return lambda x: ArrayOf(ref(x), count=count)
+    return lambda x: c_ast.ArrayDecl(ref(x), dim=IntConst(count))
 
 # Main conversion function
 def parse_dwarf(infile, cuname):
@@ -347,14 +345,8 @@ def parse_dwarf(infile, cuname):
 
 def generate_c_code(statements):
     '''Generate syntax tree'''
-    rv = Module(statements)
-    #rv = Module(
-    #        [Include('stdio.h'),
-    #         Struct(None, [Const(Pointer(Value('int', 'x')))]),
-    #         FunctionDeclaration(Const(Pointer(Const(Value('char', 'greet')))), []),
-    #         FunctionBody(
-    #             FunctionDeclaration(Const(Pointer(Const(Value('char', 'greet')))), []),
-    #             Block([Statement('return "hello world"')]))])
+    rv = c_ast.FileAST(statements)
+    #print( rv.show())
     return rv
 
 def main():
@@ -363,8 +355,7 @@ def main():
     args = parse_arguments()
     statements = parse_dwarf(args.input,args.cuname)
     ast = generate_c_code(statements)
-    for line in ast.generate():
-        sys.stdout.write(line+'\n')
+    sys.stdout.write(CGenerator().visit(ast))
 
 if __name__ == '__main__':
     main()
