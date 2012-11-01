@@ -133,7 +133,8 @@ def IntConst(n):
         return None
     return c_ast.Constant('int', str(n))
 def EnumItem(key, value):
-    return c_ast.Enumerator(key,IntConst(value), postcomment = '0x%08x' % value)
+    return c_ast.Enumerator(key,IntConst(value), postcomment = 
+            (('0x%08x' % value) if value>=0 else None))
 def SimpleDecl(x):
     return c_ast.Decl(None, [], [], [], x, None, None) 
 
@@ -273,6 +274,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         cons = lambda name: c_ast.FuncDecl(c_ast.ParamList(args), returntype(name))
 
         if die.tag == DW_TAG.subprogram:
+            # Is it somehow specified whether this function is static or external?
             assert(name is not None)
             if written[(die.tag,name)] != WRITTEN_FINAL:
                 if inline: # Generate commented declaration for inlined function
