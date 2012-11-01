@@ -223,6 +223,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
     elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
             items = None # declaration only
+            level = WRITTEN_PREREF
         else:
             items = []
             for enumval in die.children:
@@ -249,13 +250,15 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
                 ref = get_type_ref(enumval, 'type')
                 items.append(c_ast.Decl(ename,[],[],[], ref(ename), None,
                     IntConst(bit_size), postcomment=(' '.join(comment))))
+            level = WRITTEN_FINAL
+
         cons = TAG_NODE_CONS[die.tag](name, items)
         if name is None: # anonymous structure
             typeref = anon_ref(cons)
         else:
-            if written[(die.tag,name)] != WRITTEN_FINAL:
+            if written[(die.tag,name)] < level:
                 rv.append(SimpleDecl(cons))
-                written[(die.tag,name)] = WRITTEN_FINAL
+                written[(die.tag,name)] = level
 
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
