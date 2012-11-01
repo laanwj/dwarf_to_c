@@ -284,7 +284,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
             if written[(die.tag,name)] != WRITTEN_FINAL:
                 if inline: # Generate commented declaration for inlined function
                     #rv.append(Comment('\n'.join(cons.generate())))
-                    rv.append(Comment('Inline function %s' % name))
+                    rv.append(Comment('inline %s' % (CGenerator().visit(SimpleDecl(cons(name))))))
                 else:
                     rv.append(SimpleDecl(cons(name)))
                 written[(die.tag,name)] = WRITTEN_FINAL
