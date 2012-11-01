@@ -33,7 +33,7 @@ def parse_arguments():
     parser.add_argument('input', metavar='INFILE', type=str, 
             help='Input file (ELF)')
     parser.add_argument('cuname', metavar='CUNAME', type=str, 
-            help='Compilation unit name')
+            help='Compilation unit name', nargs='*')
     return parser.parse_args()        
 
 from bintools.dwarf import DWARF
@@ -307,18 +307,21 @@ def parse_dwarf(infile, cuname):
         print("No such file %s" % infile, file=sys.stderr)
         exit(1)
     dwarf = DWARF(infile)
-
-    cu = None
-    for i, c in enumerate(dwarf.info.cus):
-        if c.name.endswith(cuname):
-            cu = c
-            break
-    if cu is None:
-        print("Can't find compilation unit %s" % cuname, file=sys.stderr)
-    # enumerate all dies (flat list)
-    #for die in cu.dies:
-    #    print DW_TAG[die.tag]
-    statements = process_compile_unit(dwarf, cu)
+    if cuname:
+        # TODO: handle multiple specific compilation units
+        cu = None
+        for i, c in enumerate(dwarf.info.cus):
+            if c.name.endswith(cuname[0]):
+                cu = c
+                break
+        if cu is None:
+            print("Can't find compilation unit %s" % cuname, file=sys.stderr)
+        statements = process_compile_unit(dwarf, cu)
+    else:
+        statements = []
+        for cu in dwarf.info.cus:
+            print("Processing %s" % cu.name)
+            statements.extend(process_compile_unit(dwarf, cu))
     return statements
 
 def process_compile_unit(dwarf, cu):
@@ -327,9 +330,7 @@ def process_compile_unit(dwarf, cu):
     statements = []
     prev_decl_file = object()
     # Collect type information
-    by_offset = {}
-    for child in cu_die.children:
-        by_offset[child.offset] = child 
+    by_offset = cu.dies_dict
     # Generate actual syntax tree
     names = {} # Defined names for dies, as references, indexed by offset
     written = defaultdict(int) # What has been written to syntax tree?
