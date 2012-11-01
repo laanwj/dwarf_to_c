@@ -20,7 +20,7 @@ Convert DWARF annotations in ELF executable to C declarations
 # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION 
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 import argparse
 
 import sys, os
@@ -102,8 +102,11 @@ def not_none(x):
 #     Do this as needed
 #     Both anonymous and non-anonymous types can be moved as needed
 #     Named types by predeclaring, anonymous types can just be generated where they are needed
-def ERROR(name):
-    raise ValueError('Error: %s' % name)
+class ERROR(object):
+    def __init__(self, offset):
+        self.offset = offset
+    def __call__(self, name):
+        raise ValueError('Error: %s (for die %i)' % (name, self.offset))
 
 # Create enum/struct/union <name> to predefine types
 TAG_NODE_CONS = {
@@ -128,6 +131,7 @@ def EnumItem(key, value):
 def SimpleDecl(x):
     return c_ast.Decl(None, [], [], [], x, None, None) 
 
+# Main function to process a Dwarf die to a syntax tree fragment
 def to_c_process(die, by_offset, names, rv, written, preref=False):
     if DEBUG:
         print("to_c_process", die.offset, preref)
@@ -141,7 +145,8 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         if DEBUG:
             print (die.offset, "->", type_)
         if type_ is None:
-            assert(allow_missing) # Allow missing field?
+            if not allow_missing:
+                raise ValueError('Missing required field %s in die %i' % (attr, die.offset))
             ref = base_type_ref('void')
         else:
             ref = names.get(type_)
@@ -152,7 +157,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
                 raise ValueError("Unexpected recursion")
         return ref
         
-    names[die.offset] = typeref = ERROR # prevent unbounded recursion
+    names[die.offset] = typeref = ERROR(die.offset) # prevent unbounded recursion
 
     # Typeref based on name: simple
     name = get_str(die, 'name')
@@ -181,7 +186,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
 
     elif die.tag == DW_TAG.typedef:
         assert(name is not None)
-        ref = get_type_ref(die, 'type', allow_missing=False)
+        ref = get_type_ref(die, 'type')
         rv.append(c_ast.Typedef(name, [], ['typedef'], ref(name)))
         written[die.offset] = WRITTEN_FINAL
         typeref = base_type_ref(name) 
@@ -197,9 +202,9 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         ref = get_type_ref(die, 'type')
         typeref = ptr_to_ref(ref) 
 
-    elif die.tag == DW_TAG.const_type:
-        ref = get_type_ref(die, 'type', allow_missing=False)
-        typeref = const_ref(ref) 
+    elif die.tag in [DW_TAG.const_type, DW_TAG.volatile_type]:
+        ref = get_type_ref(die, 'type')
+        typeref = qualified_ref(ref, die.tag) 
 
     elif die.tag in [DW_TAG.structure_type, DW_TAG.union_type]:
         if get_flag(die, 'declaration', False):
@@ -266,6 +271,8 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         else: # DW_TAG.subroutine_type
             typeref = cons
     else:
+        # reference_type, class_type, set_type   etc
+        print("Warning: unhandled %s (die %i)" % (DW_TAG[die.tag], die.offset))
         rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
 
     names[die.offset] = typeref
@@ -286,8 +293,9 @@ def base_type_ref(basetypename):
 def ptr_to_ref(ref):
     return lambda x: c_ast.PtrDecl([], ref(x))
 
-def const_ref(ref):
+def qualified_ref(ref, tag):
     # XXX nested qualifiers are in reversed order in C
+    # tag: DW_TAG.const_type, DW_TAG.volatile_type
     return lambda x: ref(x) #Const(ref(x))
 
 def array_ref(ref, count=None):
@@ -310,6 +318,10 @@ def parse_dwarf(infile, cuname):
     # enumerate all dies (flat list)
     #for die in cu.dies:
     #    print DW_TAG[die.tag]
+    statements = process_compile_unit(dwarf, cu)
+    return statements
+
+def process_compile_unit(dwarf, cu):
     cu_die = cu.compile_unit
     c_file = cu.name # cu name is main file path
     statements = []
@@ -350,7 +362,7 @@ def generate_c_code(statements):
     return rv
 
 def main():
-    # The idea, basically is to convert the DWARF tree to a C syntax tree, then 
+    # The main idea is to convert the DWARF tree to a C syntax tree, then 
     # generate C code using cgen
     args = parse_arguments()
     statements = parse_dwarf(args.input,args.cuname)
