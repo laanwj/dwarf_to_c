@@ -28,6 +28,12 @@ from collections import defaultdict
 
 DEBUG=False
 
+# Logging
+def warning(x):
+    print('Warning: '+x, file=sys.stderr)
+def progress(x):
+    print('* '+x, file=sys.stderr)
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Convert DWARF annotations in ELF executable to C declarations')
     parser.add_argument('input', metavar='INFILE', type=str, 
@@ -131,6 +137,7 @@ def EnumItem(key, value):
 def SimpleDecl(x):
     return c_ast.Decl(None, [], [], [], x, None, None) 
 
+
 # Main function to process a Dwarf die to a syntax tree fragment
 def to_c_process(die, by_offset, names, rv, written, preref=False):
     if DEBUG:
@@ -182,20 +189,24 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         if name is None:
             typeref = anon_ref(enum)
         else:
-            rv.append(SimpleDecl(enum))
+            if written[(die.tag, name)] != WRITTEN_FINAL:
+                rv.append(SimpleDecl(enum))
+                written[(die.tag, name)] = WRITTEN_FINAL # typedef is always final
 
     elif die.tag == DW_TAG.typedef:
         assert(name is not None)
         ref = get_type_ref(die, 'type')
-        rv.append(c_ast.Typedef(name, [], ['typedef'], ref(name)))
-        written[die.offset] = WRITTEN_FINAL
+        if written[(die.tag, name)] != WRITTEN_FINAL:
+            rv.append(c_ast.Typedef(name, [], ['typedef'], ref(name)))
+            written[(die.tag, name)] = WRITTEN_FINAL # typedef is always final
         typeref = base_type_ref(name) 
 
     elif die.tag == DW_TAG.base_type: # IdentifierType
         if name is None: 
             name = 'unknown_base' #??
-            rv.append(Comment(str(die)))
-        rv.append(Comment("Basetype: %s" % name))
+        if written[(die.tag, name)] != WRITTEN_FINAL:
+            rv.append(Comment("Basetype: %s" % name))
+            written[(die.tag, name)] = WRITTEN_FINAL # typedef is always final
         typeref = base_type_ref(name)
 
     elif die.tag == DW_TAG.pointer_type:
@@ -236,8 +247,9 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         if name is None: # anonymous structure
             typeref = anon_ref(cons)
         else:
-            rv.append(SimpleDecl(cons))
-            written[die.offset] = WRITTEN_FINAL
+            if written[(die.tag,name)] != WRITTEN_FINAL:
+                rv.append(SimpleDecl(cons))
+                written[(die.tag,name)] = WRITTEN_FINAL
 
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
@@ -262,18 +274,22 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
 
         if die.tag == DW_TAG.subprogram:
             assert(name is not None)
-            if inline: # Generate commented declaration for inlined function
-                #rv.append(Comment('\n'.join(cons.generate())))
-                rv.append(Comment('Inline function %s' % name))
-            else:
-                rv.append(SimpleDecl(cons(name)))
-            written[die.offset] = WRITTEN_FINAL
+            if written[(die.tag,name)] != WRITTEN_FINAL:
+                if inline: # Generate commented declaration for inlined function
+                    #rv.append(Comment('\n'.join(cons.generate())))
+                    rv.append(Comment('Inline function %s' % name))
+                else:
+                    rv.append(SimpleDecl(cons(name)))
+                written[(die.tag,name)] = WRITTEN_FINAL
         else: # DW_TAG.subroutine_type
             typeref = cons
     else:
         # reference_type, class_type, set_type   etc
-        print("Warning: unhandled %s (die %i)" % (DW_TAG[die.tag], die.offset))
-        rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
+        # variable
+        if name is None or written[(die.tag,name)] != WRITTEN_FINAL:
+            rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
+            written[(die.tag,name)] = WRITTEN_FINAL
+        warning("unhandled %s (die %i)" % (DW_TAG[die.tag], die.offset))
 
     names[die.offset] = typeref
     return typeref
@@ -307,6 +323,11 @@ def parse_dwarf(infile, cuname):
         print("No such file %s" % infile, file=sys.stderr)
         exit(1)
     dwarf = DWARF(infile)
+    # Keep track of what has been written to the syntax tree
+    # Indexed by (tag,name)
+    # Instead of using this, it may be better to just collect and
+    # to dedup later, so that we can check that there are no name conflicts.
+    written = defaultdict(int) 
     if cuname:
         # TODO: handle multiple specific compilation units
         cu = None
@@ -316,15 +337,15 @@ def parse_dwarf(infile, cuname):
                 break
         if cu is None:
             print("Can't find compilation unit %s" % cuname, file=sys.stderr)
-        statements = process_compile_unit(dwarf, cu)
+        statements = process_compile_unit(dwarf, cu, written)
     else:
         statements = []
         for cu in dwarf.info.cus:
-            print("Processing %s" % cu.name)
-            statements.extend(process_compile_unit(dwarf, cu))
+            progress("Processing %s" % cu.name)
+            statements.extend(process_compile_unit(dwarf, cu, written))
     return statements
 
-def process_compile_unit(dwarf, cu):
+def process_compile_unit(dwarf, cu, written):
     cu_die = cu.compile_unit
     c_file = cu.name # cu name is main file path
     statements = []
@@ -333,10 +354,10 @@ def process_compile_unit(dwarf, cu):
     by_offset = cu.dies_dict
     # Generate actual syntax tree
     names = {} # Defined names for dies, as references, indexed by offset
-    written = defaultdict(int) # What has been written to syntax tree?
     for child in cu_die.children:
         decl_file_id = get_int(child, 'decl_file')
         decl_file = cu.get_file_path(decl_file_id) if decl_file_id is not None else None
+        # TODO: usefully keep track of decl_file per (final) symbol
         '''
         if decl_file != prev_decl_file:
             if decl_file == c_file:
@@ -347,10 +368,11 @@ def process_compile_unit(dwarf, cu):
                 s = "Defined in base"
             statements.append(Comment("======== " + s))
         '''
-        if 'name' in child.attr_dict:
+        name = get_str(child, 'name')
+        if name is not None: # non-anonymous
             if DEBUG:
                 print("root", child.offset)
-            if written[child.offset] != WRITTEN_FINAL:
+            if written[(child.tag, name)] != WRITTEN_FINAL:
                 to_c_process(child, by_offset, names, statements, written)
 
         prev_decl_file = decl_file
@@ -368,6 +390,7 @@ def main():
     args = parse_arguments()
     statements = parse_dwarf(args.input,args.cuname)
     ast = generate_c_code(statements)
+    progress('Generating output')
     sys.stdout.write(CGenerator().visit(ast))
 
 if __name__ == '__main__':
