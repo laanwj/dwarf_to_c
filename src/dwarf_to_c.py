@@ -34,6 +34,7 @@ def warning(x):
 def progress(x):
     print('* '+x, file=sys.stderr)
 
+# Command-line argument parsing
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Convert DWARF annotations in ELF executable to C declarations')
     parser.add_argument('input', metavar='INFILE', type=str, 
@@ -143,7 +144,7 @@ def SimpleDecl(x):
 def to_c_process(die, by_offset, names, rv, written, preref=False):
     if DEBUG:
         print("to_c_process", die.offset, preref)
-    def get_type_ref(die, attr, allow_missing=True):
+    def get_type_ref(die, attr):
         '''
         Get type ref for a type attribute.
         A type ref is a function that, given a name, constructs a syntax tree
@@ -153,8 +154,6 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         if DEBUG:
             print (die.offset, "->", type_)
         if type_ is None:
-            if not allow_missing:
-                raise ValueError('Missing required field %s in die %i' % (attr, die.offset))
             ref = base_type_ref('void')
         else:
             ref = names.get(type_)
@@ -241,7 +240,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
                     comment.append('of %i' % (8*get_int(enumval, 'byte_size')))
                 # TODO: validate member location (alignment), bit offset
                 ename = expect_str(enumval.attr_dict['name'])
-                ref = get_type_ref(enumval, 'type', allow_missing=False)
+                ref = get_type_ref(enumval, 'type')
                 items.append(c_ast.Decl(ename,[],[],[], ref(ename), None,
                     IntConst(bit_size), postcomment=(' '.join(comment))))
         cons = TAG_NODE_CONS[die.tag](name, items)
