@@ -83,6 +83,14 @@ class Enum(object):
     def __getattr__(self, name):
         return self.name_dict[name]
 
+    def get(self, key, default):
+        return self.dict.get(key, default)
+
+    def fmt(self, key):
+        try:
+            return self.dict[key]
+        except KeyError:
+            return "0x%x" % key
 
 def benchmark(func, *args, **kargs):
     from time import time

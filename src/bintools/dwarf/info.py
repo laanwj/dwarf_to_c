@@ -86,7 +86,7 @@ class DIE(object):
     
     def __str__(self):
         if self.tag is not None:
-            tag = '\n<%d><%d> %s' % (self.level, self.offset, DW_TAG[self.tag])
+            tag = '\n<%d><%d> %s' % (self.level, self.offset, DW_TAG.fmt(self.tag))
         else:
             tag = '\n[None]'
         return '\n'.join(map(str, [tag] + self.attr))

@@ -126,6 +126,9 @@ WRITTEN_NONE = 0   # Nothing has been written about this type
 WRITTEN_PREREF = 1 # Predefinition has been written
 WRITTEN_FINAL = 2  # Final structure has been written
 
+def unistr(x):
+    return unicode(str(x), 'latin-1')
+
 # Syntax tree helpers
 def Comment(x):
     return c_ast.DummyNode(postcomment=x) 
@@ -223,7 +226,10 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         else:
             items = []
             for enumval in die.children:
-                assert(enumval.tag == DW_TAG.member)
+                if enumval.tag != DW_TAG.member:
+                    warning('Unexpected tag %s inside struct or union (die %i)' %
+                            (DW_TAG.fmt(enumval.tag), die.offset))
+                    continue
                 # data_member_location and bit_size / bit_offset as comment for fields
                 bit_size = None
                 comment = []
@@ -288,9 +294,9 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         # reference_type, class_type, set_type   etc
         # variable
         if name is None or written[(die.tag,name)] != WRITTEN_FINAL:
-            rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG[die.tag], die)))
+            rv.append(Comment("Unhandled: %s\n%s" % (DW_TAG.fmt(die.tag), unistr(die))))
             written[(die.tag,name)] = WRITTEN_FINAL
-        warning("unhandled %s (die %i)" % (DW_TAG[die.tag], die.offset))
+        warning("unhandled %s (die %i)" % (DW_TAG.fmt(die.tag), die.offset))
 
     names[die.offset] = typeref
     return typeref
