@@ -10,10 +10,17 @@ Usage
 
     usage: dwarf_to_c.py [-h] INFILE [CUNAME]
 
-Where INFILE is the name of the ELF binary, and CUNAME is the name of the compilation unit 
+Where INFILE is the name of an ELF binary, and CUNAME is the name of the compilation unit 
 (this can be the full name or only the base name, such as `test.c`).
 
 If CUNAME is left out, all compilation units in the ELF object will be processed.
+
+Misc tools
+===========
+
+    usage: inline_functions.py [-h] INPUT
+
+List all usages of inline functions.
 
 Info on used libraries
 ========================

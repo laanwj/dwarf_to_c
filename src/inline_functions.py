@@ -82,6 +82,10 @@ def process(die, by_offset, depth):
     origin = get_ref_lookup(die, 'abstract_origin', by_offset)
     if origin is not None:
         name = get_str(origin, 'name')
+    #if 'ranges' in die.attr_dict:
+    #    print(die.attr_dict['ranges'])
+    #if 'location' in die.attr_dict: # has range, <reg> or <fbreg op>
+    #    print(die.attr_dict['location'])
    
     info = [ip_range(die), DW_TAG.fmt(die.tag), name, entry_pc(die)]
 
@@ -109,7 +113,7 @@ def parse_dwarf(infile, out):
     # no need to keep state between them
     for cu in dwarf.info.cus:
         print(SEP)
-        print("Compilation unit %s" % cu.name)
+        print(cu.name)
         print(SEP)
         process_compile_unit(dwarf, cu, out)
 
