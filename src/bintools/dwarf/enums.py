@@ -152,6 +152,13 @@ DW_AT = Enum({
 
     0x2000: 'lo_user',
     0x2007: 'MIPS_linkage_name',
+    # Extensions for Fission.  See http://gcc.gnu.org/wiki/DebugFission.
+    0x2130: 'GNU_dwo_name',
+    0x2131: 'GNU_dwo_id',
+    0x2132: 'GNU_ranges_base',
+    0x2133: 'GNU_addr_base',
+    0x2134: 'GNU_pubnames',
+    0x2135: 'GNU_pubtypes',
     0x3fff: 'hi_user',
 })
 
@@ -551,7 +558,12 @@ DW_OP = Enum({
     0x9d: 'bit_piece',
     0x9e: 'implicit_value',
     0x9f: 'stack_value',
-    0xe0: 'lo_user',
+    #0xe0: 'lo_user',
+    0xe0: 'GNU_push_tls_address',
+    0xf0: 'GNU_uninit',
+    0xf1: 'GNU_encoded_addr',
+    0xf2: 'GNU_implicit_pointer',
+    0xf3: 'GNU_entry_value',
     0xff: 'hi_user',
 })
 

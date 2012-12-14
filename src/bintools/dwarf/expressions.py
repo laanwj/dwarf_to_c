@@ -86,6 +86,9 @@ DW_OP_OPERANDS = {
     DW_OP.call_ref: ('data4', None),
     DW_OP.bit_piece: ('udata', 'udata'),
     DW_OP.implicit_value: ('block', None),
+
+    # GNU
+    DW_OP.GNU_implicit_pointer: ('addr', 'sdata'),
 }
 
 
