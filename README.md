@@ -22,6 +22,11 @@ Misc tools
 
 List all usages of inline functions.
 
+    usage: extract_structures_json.py [-h] INFILE ROOT
+
+Dump DWARF information for data structure ROOT and all substructures into JSON
+format. This can be useful for pretty-printers.
+
 Info on used libraries
 ========================
 

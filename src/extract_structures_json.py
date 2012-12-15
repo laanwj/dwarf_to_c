@@ -188,7 +188,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Extract structures from DWARF as parseable format')
     parser.add_argument('input', metavar='INFILE', type=str, 
             help='Input file (ELF)')
-    parser.add_argument('root', metavar='INFILE', type=str, 
+    parser.add_argument('root', metavar='ROOT', type=str, 
             help='Root data structure name')
     return parser.parse_args()        
 
