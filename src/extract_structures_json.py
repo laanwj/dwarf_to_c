@@ -166,7 +166,8 @@ def process_compile_unit(dwarf, cu, root):
             print('%s not handled' % DW_TAG[die.tag])
             exit(1)
 
-        types[type_name(die)] = type_info
+        type_info['name'] = type_name(die)
+        types[type_info['name']] = type_info
 
     return types
 
