@@ -196,7 +196,10 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
                 if 'byte_size' in enumval.attr_dict:
                     comment.append('of %i' % (8*get_int(enumval, 'byte_size')))
                 # TODO: validate member location (alignment), bit offset
-                ename = expect_str(enumval.attr_dict['name'])
+                if 'name' in enumval.attr_dict:
+                    ename = expect_str(enumval.attr_dict['name'])
+                else:
+                    ename = None
                 ref = get_type_ref(enumval, 'type')
                 items.append(c_ast.Decl(ename,[],[],[], ref(ename), None,
                     IntConst(bit_size), postcomment=(' '.join(comment))))
