@@ -5,6 +5,18 @@ Tool to generate C headers from DWARF debug data.
 Can be used to recover types and function signatures from compiled 
 executables and libraries with debug information.
 
+!!IMPORTANT NOTE!!
+====================
+
+This utility, as well as the underlying library `pydevtools` has no support for
+the more recent DWARF 4 format, but only for DWARF 2 and 3.
+
+This makes it currently fail on a lot of recent executables.
+
+Patches to improve this are welcome. Unfortunately, `pydevtools` is not
+actively maintained, so this would mean either switching to another ELF/DWARF
+parsing library or taking up maintenance...
+
 Usage
 ======
 
@@ -44,9 +56,11 @@ PLY.
 
 * pycparser: hg clone https://code.google.com/p/pycparser/ 
   commit: 85c90831e94d 
+  (non-Google Code URL: https://github.com/eliben/pycparser)
 
 * pydevtools: svn checkout http://pydevtools.googlecode.com/svn/trunk/ pydevtools-read-only 
   commit: r43
+  (non-Google Code URL: https://github.com/arowser/pydevtools)
 
 Authors
 ===========
