@@ -15,7 +15,8 @@ This makes it currently fail on a lot of recent executables.
 
 Patches to improve this are welcome. Unfortunately, `pydevtools` is not
 actively maintained, so this would mean either switching to another ELF/DWARF
-parsing library or taking up maintenance...
+parsing library ([pyelftools](https://github.com/eliben/pyelftools) looks
+promising) or taking up maintenance...
 
 Usage
 ======
