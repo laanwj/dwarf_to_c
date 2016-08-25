@@ -53,6 +53,7 @@ DW_TAG = Enum({
     0x33: 'variant_part',
     0x34: 'variable',
     0x35: 'volatile_type',
+    0x39: 'namespace',
     0x4080: 'lo_user',
     0xffff: 'hi_user',
 })
@@ -150,8 +151,23 @@ DW_AT = Enum({
     0x67: 'pure',
     0x68: 'recursive',
 
+    0x6d: 'enum_class',
+
     0x2000: 'lo_user',
     0x2007: 'MIPS_linkage_name',
+
+    0x2110: 'GNU_template_name',
+
+    0x2111: 'GNU_call_site_value',
+    0x2112: 'GNU_call_site_data_value',
+    0x2113: 'GNU_call_site_target',
+    0x2114: 'GNU_call_site_target_clobbered',
+    0x2115: 'GNU_tail_call',
+    0x2116: 'GNU_all_tail_call_sites',
+    0x2117: 'GNU_all_call_sites',
+    0x2118: 'GNU_all_source_call_sites',
+    0x2119: 'AT_GNU_macros',
+
     # Extensions for Fission.  See http://gcc.gnu.org/wiki/DebugFission.
     0x2130: 'GNU_dwo_name',
     0x2131: 'GNU_dwo_id',
@@ -399,6 +415,20 @@ class DW_OP(object):
     implicit_value = 0x9e
     stack_value = 0x9f
     lo_user = 0xe0
+
+    GNU_uninit = 0xf0
+    GNU_encoded_addr = 0xf1
+    GNU_implicit_pointer = 0xf2
+    GNU_entry_value = 0xf3
+    GNU_const_type = 0xf4
+    GNU_regval_type = 0xf5
+    GNU_deref_type = 0xf6
+    GNU_convert = 0xf7
+    GNU_reinterpret = 0xf9
+    GNU_parameter_ref = 0xfa
+    GNU_addr_index = 0xfb
+    GNU_const_index = 0xfc
+
     hi_user = 0xff
 
 
@@ -558,12 +588,27 @@ DW_OP = Enum({
     0x9d: 'bit_piece',
     0x9e: 'implicit_value',
     0x9f: 'stack_value',
+
+    0xbc: 'fuck',
+    0xd2: 'fuck2',
+
     #0xe0: 'lo_user',
+
     0xe0: 'GNU_push_tls_address',
+
     0xf0: 'GNU_uninit',
     0xf1: 'GNU_encoded_addr',
     0xf2: 'GNU_implicit_pointer',
     0xf3: 'GNU_entry_value',
+    0xf4: 'GNU_const_type',
+    0xf5: 'GNU_regval_type',
+    0xf6: 'GNU_deref_type',
+    0xf7: 'GNU_convert',
+    0xf9: 'GNU_reinterpret',
+    0xfa: 'GNU_parameter_ref',
+    0xfb: 'GNU_addr_index',
+    0xfc: 'GNU_const_index',
+
     0xff: 'hi_user',
 })
 
