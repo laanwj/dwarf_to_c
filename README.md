@@ -97,13 +97,9 @@ So we took the C generation part out of `pycparser` and adapted it to our needs.
 support was stripped as it is not needed for these tools, and to remove the dependency on 
 PLY.
 
-* pycparser: hg clone https://code.google.com/p/pycparser/ 
-  commit: 85c90831e94d 
-  (non-Google Code URL: https://github.com/eliben/pycparser)
+* pycparser: https://github.com/eliben/pycparser commit: 07f67a2 2012-08-10
 
-* pydevtools: svn checkout http://pydevtools.googlecode.com/svn/trunk/ pydevtools-read-only 
-  commit: r43
-  (non-Google Code URL: https://github.com/arowser/pydevtools)
+* pydevtools: https://github.com/arowser/pydevtools commit: a360056 2012-05-14
 
 Authors
 ===========
