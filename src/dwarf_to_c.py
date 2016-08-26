@@ -189,8 +189,10 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
                     if ml.form in ['sdata', 'data1', 'data2', 'data4', 'data8']:
                         comment.append("+0x%x" % ml.value)
                     elif ml.form in ['block', 'block1']:
-                        assert(expr.instructions[0].opcode == DW_OP.plus_uconst)
-                        comment.append("+0x%x" % expr.instructions[0].operand_1)
+                        expr = ml.value
+                        if len(expr.instructions) >= 1 and expr.instructions[0].opcode == DW_OP.plus_uconst:
+                            comment.append("+0x%x" % expr.instructions[0].operand_1)
+
                 if 'bit_size' in enumval.attr_dict:
                     bit_size = get_int(enumval, 'bit_size')
                 if 'bit_offset' in enumval.attr_dict:
