@@ -18,6 +18,48 @@ actively maintained, so this would mean either switching to another ELF/DWARF
 parsing library ([pyelftools](https://github.com/eliben/pyelftools) looks
 promising) or taking up maintenance...
 
+Alternatively, if you have control over compilation, you can specify GCC to
+generate DWARF3 instead:
+
+   gcc teest.c -gdwarf-3 -o teest 
+
+In:
+
+```c
+struct packet {
+    int from, to;
+    char name[16];
+    int sin:1, ark:1, arg:1, fun:1;
+    enum { NEWT, DUCK, WOLF } type;
+} x;
+
+int main() { return 0; }
+```
+
+Out:
+
+```c
+struct packet
+{
+  int from; /* +0x0 */
+  int to; /* +0x4 */
+  char name[16]; /* +0x8 */
+  int sin:1; /* +0x18 bit 31..31 of 32 */
+  int ark:1; /* +0x18 bit 30..30 of 32 */
+  int arg:1; /* +0x18 bit 29..29 of 32 */
+  int fun:1; /* +0x18 bit 28..28 of 32 */
+  enum {
+    NEWT = 0, /* 0x00000000 */
+    DUCK = 1, /* 0x00000001 */
+    WOLF = 2 /* 0x00000002 */
+  } type; /* +0x1c */
+};
+/* Basetype: sizetype */
+int main();
+```
+
+So it seems that this tool is still somewhat useful as-is...
+
 Usage
 ======
 
