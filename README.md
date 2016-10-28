@@ -8,8 +8,8 @@ executables and libraries with debug information.
 !!IMPORTANT NOTE!!
 ====================
 
-This utility, as well as the underlying library `pydevtools` has no support for
-the more recent DWARF 4 format, but only for DWARF 2 and 3.
+This utility, as well as the underlying library `pydevtools` has limited
+support for the more recent DWARF 4 format.
 
 This makes it currently fail on a lot of recent executables.
 
@@ -57,8 +57,6 @@ struct packet
 /* Basetype: sizetype */
 int main();
 ```
-
-So it seems that this tool is still somewhat useful as-is...
 
 Usage
 ======
