@@ -42,8 +42,8 @@ DW_OP_OPERANDS = {
     DW_OP.const4s: ('sdata4', None),
     DW_OP.const8u: ('data8', None),
     DW_OP.const8s: ('sdata8', None),
-    DW_OP.constu : ('read_udata', None),
-    DW_OP.consts : ('read_sdata', None),
+    DW_OP.constu : ('udata', None),
+    DW_OP.consts : ('sdata', None),
     
     # Register Based Addressing
     DW_OP.fbreg : ('sdata', None),
@@ -89,6 +89,12 @@ DW_OP_OPERANDS = {
 
     # GNU
     DW_OP.GNU_implicit_pointer: ('addr', 'sdata'),
+    DW_OP.GNU_entry_value: ('exprloc', None),
+    DW_OP.GNU_const_type: ('udata', 'block1'),
+    DW_OP.GNU_regval_type: ('udata', 'udata'),
+    DW_OP.GNU_deref_type: ('data1', 'udata'),
+    DW_OP.GNU_convert: ('udata', None),
+    DW_OP.GNU_parameter_ref: ('data4', None),
 }
 
 
@@ -106,8 +112,9 @@ class Expression(object):
             
             opcode = dwarf.u08()
             if opcode not in DW_OP:
-                raise ParseError("Unknown DW_OP code: %d" % opcode)
-            
+                previnst = ','.join(str(x) for x in self.instructions)
+                raise ParseError("Unknown DW_OP code: %d (after %s, offset 0x%x)" % (opcode, previnst, dwarf.io.tell()))
+
             operand_1 = operand_2 = None
             if opcode in DW_OP_OPERANDS:
                 type_1, type_2 = DW_OP_OPERANDS[opcode]

@@ -13,7 +13,7 @@ def expect_ref(attr):
     return attr.value
 
 def expect_flag(attr):
-    assert(attr.form in ['flag'])
+    assert(attr.form in ['flag','flag_present'])
     return attr.value
 
 def expect_addr(attr):

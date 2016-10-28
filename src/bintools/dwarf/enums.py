@@ -150,8 +150,13 @@ DW_AT = Enum({
     0x66: 'elemental',
     0x67: 'pure',
     0x68: 'recursive',
-
+    # DWARF 4 values
+    0x69: 'signature',
+    0x6a: 'main_subprogram',
+    0x6b: 'data_bit_offset',
+    0x6c: 'const_expr',
     0x6d: 'enum_class',
+    0x6e: 'linkage_name',
 
     0x2000: 'lo_user',
     0x2007: 'MIPS_linkage_name',
@@ -416,16 +421,17 @@ class DW_OP(object):
     stack_value = 0x9f
     lo_user = 0xe0
 
+    # https://fedorahosted.org/elfutils/wiki/DwarfExtensions
     GNU_uninit = 0xf0
     GNU_encoded_addr = 0xf1
     GNU_implicit_pointer = 0xf2
-    GNU_entry_value = 0xf3
-    GNU_const_type = 0xf4
-    GNU_regval_type = 0xf5
-    GNU_deref_type = 0xf6
-    GNU_convert = 0xf7
+    GNU_entry_value = 0xf3  # http://www.dwarfstd.org/ShowIssue.php?issue=100909.1
+    GNU_const_type = 0xf4 # http://www.dwarfstd.org/doc/040408.1.html
+    GNU_regval_type = 0xf5 # http://www.dwarfstd.org/doc/040408.1.html
+    GNU_deref_type = 0xf6 # http://www.dwarfstd.org/doc/040408.1.html
+    GNU_convert = 0xf7 # http://www.dwarfstd.org/doc/040408.1.html
     GNU_reinterpret = 0xf9
-    GNU_parameter_ref = 0xfa
+    GNU_parameter_ref = 0xfa # https://gcc.gnu.org/ml/gcc-patches/2011-06/msg00649.html
     GNU_addr_index = 0xfb
     GNU_const_index = 0xfc
 

@@ -23,14 +23,16 @@ class DwarfStream(object):
         elif addr_size == 4:
             self.read_addr = self.u32
             self.max_addr = 0xFFFFFFFF
-        
         elif addr_size == 8:
             self.read_addr = self.u64
             self.max_addr = 0xFFFFFFFFFFFFFFFF
+
         if self.bits == ELFCLASS.ELFCLASS32:
             self.CIE_ID = 0xFFFFFFFF
+            self.read_sec_offset = self.u32
         elif self.bits == ELFCLASS.ELFCLASS64:
             self.CIE_ID = 0xFFFFFFFFFFFFFFFF
+            self.read_sec_offset = self.u64
         
         # Read methods aliases
         self.read_data1 = self.read_ref1 = self.u08
@@ -104,6 +106,9 @@ class DwarfStream(object):
     def read_flag(self):
         return (self.u08() != 0)
     
+    def read_flag_present(self): # the attribute is implicitly indicated as present
+        return True
+    
     def read_indirect(self):
         return self.read_form(self.ULEB128())
     
@@ -135,6 +140,8 @@ class DwarfStream(object):
     def read_expr(self):
         return Expression(self, self.u16())
 
+    def read_exprloc(self):
+        return Expression(self, self.ULEB128())
 
 class SectionLoader(object):
     def __init__(self, dwarf, section_name, Entry):

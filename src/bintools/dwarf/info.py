@@ -101,7 +101,7 @@ class CU(object):
         length = dwarf.u32()
         stop = dwarf.io.tell() + length
         
-        ver = dwarf.check_version(handled=[2, 3])
+        ver = dwarf.check_version(handled=[2, 3, 4])
         
         abbrev_offset = dwarf.u32()
         self.pointer_size = dwarf.u08()
