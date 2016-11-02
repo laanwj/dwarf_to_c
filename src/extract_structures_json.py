@@ -137,7 +137,7 @@ def visit_structure_type(die,dies_dict):
     type_info['members'] = members
     return type_info
 
-def process_compile_unit(dwarf, cu, root):
+def process_compile_unit(dwarf, cu, roots):
     cu_die = cu.compile_unit
     # Generate actual syntax tree
     global worklist
@@ -149,7 +149,7 @@ def process_compile_unit(dwarf, cu, root):
 
         name = get_str(child, 'name')
         if name is not None: # non-anonymous
-            if name == root: # nest into this structure
+            if name in roots: # nest into this structure
                 worklist.append(child)
               
     while worklist:
@@ -179,7 +179,7 @@ def process_compile_unit(dwarf, cu, root):
 
 
 # Main conversion function
-def parse_dwarf(infile, root):
+def parse_dwarf(infile, roots):
     if not os.path.isfile(infile):
         error("No such file %s" % infile)
         exit(1)
@@ -187,22 +187,27 @@ def parse_dwarf(infile, root):
 
     for cu in dwarf.info.cus:
         progress("Processing %s" % cu.name)
-        types = process_compile_unit(dwarf, cu, root)
-        if types:
+        types = process_compile_unit(dwarf, cu, roots)
+        if all(x in types for x in roots): # return if all roots found
             return types
+
+    return None # not found
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Extract structures from DWARF as parseable format')
     parser.add_argument('input', metavar='INFILE', type=str, 
             help='Input file (ELF)')
-    parser.add_argument('root', metavar='ROOT', type=str, 
+    parser.add_argument('roots', metavar='ROOT', type=str, nargs='+',
             help='Root data structure name')
     return parser.parse_args()        
 
 def main():
     import json
     args = parse_arguments()
-    types = parse_dwarf(args.input, args.root)
+    types = parse_dwarf(args.input, args.roots)
+    if types == None:
+        error('Did not find all roots (%s) in any compile unit' % args.roots)
+        exit(1)
     json.dump(types, sys.stdout,
             sort_keys=True, indent=4, separators=(',', ': '))
     print()
