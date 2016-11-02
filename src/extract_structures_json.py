@@ -113,9 +113,15 @@ def visit_structure_type(die,dies_dict):
         # handle union as "structure with all fields at offset 0"
         offset = 0
         if 'data_member_location' in child.attr_dict:
-            expr = child.attr_dict['data_member_location'].value
-            assert(expr.instructions[0].opcode == DW_OP.plus_uconst)
-            offset = expr.instructions[0].operand_1
+            attr = child.attr_dict['data_member_location']
+            if attr.form == 'expr':
+                expr = attr.value
+                assert(expr.instructions[0].opcode == DW_OP.plus_uconst)
+                offset = expr.instructions[0].operand_1
+            elif attr.form in ['data1', 'data2', 'data4', 'data']:
+                offset = attr.value
+            else:
+                assert(0) # unhandled form
         
         member_info['offset'] = offset
 
