@@ -29,10 +29,8 @@ class DwarfStream(object):
 
         if self.bits == ELFCLASS.ELFCLASS32:
             self.CIE_ID = 0xFFFFFFFF
-            self.read_sec_offset = self.u32
         elif self.bits == ELFCLASS.ELFCLASS64:
             self.CIE_ID = 0xFFFFFFFFFFFFFFFF
-            self.read_sec_offset = self.u64
         
         # Read methods aliases
         self.read_data1 = self.read_ref1 = self.u08
@@ -44,6 +42,7 @@ class DwarfStream(object):
         self.read_sdata2 = self.s16
         self.read_sdata4 = self.s32
         self.read_sdata8 = self.s64
+        self.read_sec_offset = self.u32
     
     def check_version(self, handled=[2], bytes=2):
         if bytes == 1:
