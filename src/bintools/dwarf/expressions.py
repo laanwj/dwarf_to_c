@@ -88,7 +88,7 @@ DW_OP_OPERANDS = {
     DW_OP.implicit_value: ('block', None),
 
     # GNU
-    DW_OP.GNU_implicit_pointer: ('addr', 'sdata'),
+    DW_OP.GNU_implicit_pointer: ('data4', 'sdata'),
     DW_OP.GNU_entry_value: ('exprloc', None),
     DW_OP.GNU_const_type: ('udata', 'block1'),
     DW_OP.GNU_regval_type: ('udata', 'udata'),
