@@ -166,7 +166,7 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
         ref = get_type_ref(die, 'type')
         typeref = ptr_to_ref(ref) 
 
-    elif die.tag in [DW_TAG.const_type, DW_TAG.volatile_type]:
+    elif die.tag in [DW_TAG.const_type, DW_TAG.volatile_type, DW_TAG.restrict_type]:
         ref = get_type_ref(die, 'type')
         typeref = qualified_ref(ref, die.tag) 
 
@@ -279,7 +279,7 @@ def ptr_to_ref(ref):
 
 def qualified_ref(ref, tag):
     # XXX nested qualifiers are in reversed order in C
-    # tag: DW_TAG.const_type, DW_TAG.volatile_type
+    # tag: DW_TAG.const_type, DW_TAG.volatile_type, DW_TAG.restrict_type
     return lambda x: ref(x) #Const(ref(x))
 
 def array_ref(ref, count=None):
