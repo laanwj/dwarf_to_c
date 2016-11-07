@@ -157,6 +157,8 @@ def process_compile_unit(dwarf, cu, roots):
         if die is None or die.offset in visited:
             continue
         visited.add(die.offset)
+        if get_flag(die, "declaration"): # only predeclaration, skip
+            continue
 
         if DEBUG:
             print("[%s]" % (type_name(die)))
@@ -169,8 +171,8 @@ def process_compile_unit(dwarf, cu, roots):
         elif die.tag in [DW_TAG.enumeration_type]:
             type_info = visit_enumeration_type(die, cu.dies_dict)
         else:
-            print('%s not handled' % DW_TAG[die.tag])
-            exit(1)
+            warning('%s not handled' % DW_TAG[die.tag])
+            type_info = {}
 
         type_info['name'] = type_name(die)
         types[type_info['name']] = type_info
