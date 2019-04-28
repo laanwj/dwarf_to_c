@@ -182,6 +182,8 @@ DW_AT = Enum({
     0x6c: 'const_expr',
     0x6d: 'enum_class',
     0x6e: 'linkage_name',
+    # DWARF 5 values
+    0x87: 'noreturn',
 
     0x2000: 'lo_user',
     0x2007: 'MIPS_linkage_name',
@@ -196,7 +198,8 @@ DW_AT = Enum({
     0x2116: 'GNU_all_tail_call_sites',
     0x2117: 'GNU_all_call_sites',
     0x2118: 'GNU_all_source_call_sites',
-    0x2119: 'AT_GNU_macros',
+    0x2119: 'GNU_macros',
+    0x211a: 'GNU_deleted',
 
     # Extensions for Fission.  See http://gcc.gnu.org/wiki/DebugFission.
     0x2130: 'GNU_dwo_name',
