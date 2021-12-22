@@ -149,7 +149,10 @@ class SectionLoader(object):
         """
         self.dwarf = dwarf
         self.section_name = section_name
-        self.section = dwarf.sect_dict[section_name]
+        if section_name in dwarf.sect_dict:
+            self.section = dwarf.sect_dict[section_name]
+        else:
+            return
         
         dwarf.io.seek(self.section.offset)
         

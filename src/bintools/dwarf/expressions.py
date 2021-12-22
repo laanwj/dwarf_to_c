@@ -113,7 +113,7 @@ class Expression(object):
             opcode = dwarf.u08()
             if opcode not in DW_OP:
                 previnst = ','.join(str(x) for x in self.instructions)
-                raise ParseError("Unknown DW_OP code: %d (after %s, offset 0x%x)" % (opcode, previnst, dwarf.io.tell()))
+                break #raise ParseError("Unknown DW_OP code: %d (after %s, offset 0x%x)" % (opcode, previnst, dwarf.io.tell()))
 
             operand_1 = operand_2 = None
             if opcode in DW_OP_OPERANDS:

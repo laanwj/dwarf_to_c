@@ -92,7 +92,7 @@ def statement_information(dwarf, prog):
                         (255 - prog.opcode_base) / prog.line_range)
         
         else:
-            assert False, 'Opcode not implemented: %d' % opcode
+            return matrix #assert False, 'Opcode not implemented: %d' % opcode
     
     return matrix
 

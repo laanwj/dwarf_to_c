@@ -184,6 +184,7 @@ DW_AT = Enum({
     0x6e: 'linkage_name',
     # DWARF 5 values
     0x87: 'noreturn',
+    0x88: 'alignment',
 
     0x2000: 'lo_user',
     0x2007: 'MIPS_linkage_name',
