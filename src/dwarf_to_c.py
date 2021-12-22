@@ -220,13 +220,11 @@ def to_c_process(die, by_offset, names, rv, written, preref=False):
 
     elif die.tag == DW_TAG.array_type:
         subtype = get_type_ref(die, 'type')
-        count = None
+        counts = []
         for val in die.children:
             if val.tag == DW_TAG.subrange_type:
-                count = get_int(val, 'upper_bound')
-        if count is not None:
-            count += 1 # count is upper_bound + 1
-        typeref = array_ref(subtype, count) 
+                counts.append(get_int(val, 'upper_bound') + 1)
+        typeref = array_ref(subtype, counts)
 
     elif die.tag in [DW_TAG.subroutine_type, DW_TAG.subprogram]:
         inline = get_int(die, 'inline', 0)
@@ -282,8 +280,8 @@ def qualified_ref(ref, tag):
     # tag: DW_TAG.const_type, DW_TAG.volatile_type, DW_TAG.restrict_type
     return lambda x: ref(x) #Const(ref(x))
 
-def array_ref(ref, count=None):
-    return lambda x: c_ast.ArrayDecl(ref(x), dim=IntConst(count))
+def array_ref(ref, counts=[]):
+    return lambda x: c_ast.ArrayDecl(ref(x), dim=[(lambda x : IntConst(x))(x) for x in counts])
 
 # Main conversion function
 def parse_dwarf(infile, cuname):
